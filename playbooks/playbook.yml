@@ -1,0 +1,73 @@
+---
+- hosts: foreign
+  remote_user: ubuntu
+  become: yes
+  become_method: sudo
+  tasks:
+    - name: Update ubuntu system and services
+      apt: update_cache=yes
+
+    - name: Install Basic Unix-level services
+      apt: name={{ item }} state=latest
+      with_items:
+        - nginx
+        - python3
+        - python3-pip
+        - python3.5-venv
+        - git
+        - libtiff5-dev
+        - libjpeg8-dev
+        - zlib1g-dev
+        - libfreetype6-dev
+        - liblcms2-dev
+        - libwebp-dev
+        - tcl8.6-dev
+        - tk8.6-dev
+        - python-tk
+        - python-dev
+        - libpq-dev
+    
+    - name: Clone git repo into ubuntu's home directory
+      git: clone=yes repo=https://github.com/AveryPratt/django-imager.git dest=/home/ubuntu/django-imager
+
+    - name: Create a new virtual environment
+      command: python3 -m venv {{ envname }}
+
+    - file:
+        path: /home/ubuntu/django-imager/imagersite/MEDIA/
+        mode: "u+rwx"
+
+    - name: Add environment variables to bashrc
+      shell: echo "export {{ item }}" >> /home/ubuntu/django-imager/bin/activate
+      with_items:        
+        - SECRET_KEY='sz@q+f@3qz_10sl-8o5^o1q%l%yvwqix9_g2=3auu3^(zpn&4r'
+        - DEBUG=False
+        - ALLOWED_HOSTS=ec2-35-160-10-215.us-west-2.compute.amazonaws.com
+        - NAME=imager_db
+        - USERNAME=imager_user
+        - DB_PASSWORD=supersecret
+        - HOST=example-db.cgnycz5s0yfj.us-west-2.rds.amazonaws.com
+        - EM_PASS=supersecret
+
+    - name: Install gunicorn
+      pip: virtualenv={{ envname }} name=gunicorn
+
+    - name: Register the old default file
+      stat: path=/etc/nginx/sites-available/default.orig
+      register: default_stat
+
+    - name: Rename old default file
+      command: mv /etc/nginx/sites-available/default /etc/nginx/sites-available/default.orig
+      when: not default_stat.stat.exists
+
+    - name: Create a new default file for nginx
+      template: src=../templates/nginx_config.jinja2 dest=/etc/nginx/sites-available/default
+
+    - name: Restart nginx services
+      service: name=nginx state=restarted
+
+    - name: Copy upstart script into /etc/init
+      template: src=../templates/upstart_config dest=/etc/init/django-imager.conf
+
+    - name: Restart the imager app upstart job
+      service: name=django-imager

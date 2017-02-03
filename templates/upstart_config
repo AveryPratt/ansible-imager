@@ -1,0 +1,11 @@
+description "imager app"
+
+start on (file system)
+stop on runlevel [016]
+
+respawn
+setuid nobody
+setgid nogroup
+chdir /home/ubuntu/django_imager/imagersite/src/
+
+exec /home/ubuntu/django_imager/imagersite/bin/gunicorn -b :8080 imagersite.wsgi:application
